@@ -1087,8 +1087,8 @@ def page_kelola_data():
 
     df_raw = db.fetch_all()
 
-    tab1, tab2, tab3, tab4 = st.tabs(
-        ["➕ Tambah / Edit", "🗑️ Hapus", "📥 Import CSV", "📤 Export Excel"])
+    tab1, tab2, tab3, tab4, tab5 = st.tabs(
+        ["➕ Tambah / Edit", "🗑️ Hapus", "📥 Import CSV", "📤 Export Excel", "📍 Centroid Kelurahan"])
 
     # ── TAMBAH / EDIT ─────────────────────────────────────────
     with tab1:
@@ -1211,6 +1211,52 @@ def page_kelola_data():
             "⬇️ Unduh Excel (.xlsx)", buf.getvalue(),
             "r2_data_export.xlsx",
             "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+
+    # ── CENTROID KELURAHAN ────────────────────────────────────
+    with tab5:
+        st.markdown("#### Kelola Titik Centroid Kelurahan (untuk label di Peta Interaktif)")
+        st.caption(
+            "Centroid dihitung otomatis dari shapefile lewat `scripts/import_centroid.py`. "
+            "Gunakan form ini kalau ada kelurahan yang titiknya perlu digeser manual atau "
+            "kelurahan baru yang belum ada di shapefile.")
+
+        df_geo = db.fetch_all_centroid()
+
+        with st.form("form_centroid"):
+            c1, c2 = st.columns(2)
+            with c1:
+                kec_opt_geo = sorted(set(df_geo["kecamatan"]).union(set(KECAMATAN)).union({"(Kecamatan Baru)"}))
+                kec_pilih_geo = st.selectbox("Kecamatan:", kec_opt_geo, key="geo_kec")
+                kec_baru_geo  = st.text_input("Nama Kecamatan Baru:", key="geo_kec_baru") if kec_pilih_geo == "(Kecamatan Baru)" else None
+                kelurahan_geo = st.text_input("Kelurahan:", key="geo_kel")
+            with c2:
+                lat = st.number_input("Latitude:", value=-6.595, format="%.6f", step=0.0001)
+                lon = st.number_input("Longitude:", value=106.800, format="%.6f", step=0.0001)
+            submitted_geo = st.form_submit_button("💾 Simpan Centroid")
+            if submitted_geo:
+                kec_final_geo = (kec_baru_geo or "").strip() if kec_pilih_geo == "(Kecamatan Baru)" else kec_pilih_geo
+                if not kec_final_geo or not kelurahan_geo.strip():
+                    st.error("Kecamatan dan Kelurahan wajib diisi.")
+                else:
+                    db.upsert_centroid(kec_final_geo, kelurahan_geo, lat, lon)
+                    st.success(f"Centroid tersimpan: {kec_final_geo} / {kelurahan_geo.strip().upper()} = ({lat}, {lon})")
+                    _reload_after_write()
+
+        st.markdown("---")
+        st.markdown("#### Data Centroid Saat Ini")
+        st.dataframe(df_geo, use_container_width=True, hide_index=True)
+
+        if not df_geo.empty:
+            df_geo["label"] = (df_geo["kecamatan"] + " / " + df_geo["kelurahan"]
+                                + " (" + df_geo["lat"].astype(str) + ", " + df_geo["lon"].astype(str) + ")")
+            pilihan_geo = st.multiselect("Pilih centroid yang akan dihapus:", df_geo["id"],
+                                          format_func=lambda i: df_geo.loc[df_geo["id"] == i, "label"].iloc[0],
+                                          key="hapus_centroid")
+            if pilihan_geo and st.button("🗑️ Hapus Centroid Terpilih", type="primary", key="btn_hapus_centroid"):
+                for row_id in pilihan_geo:
+                    db.delete_centroid(row_id)
+                st.success(f"{len(pilihan_geo)} centroid dihapus.")
+                _reload_after_write()
 
 
 # ════════════════════════════════════════════════════════════

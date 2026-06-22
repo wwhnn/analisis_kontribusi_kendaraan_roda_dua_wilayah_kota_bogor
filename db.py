@@ -58,6 +58,18 @@ def fetch_centroid_kel() -> dict:
     return {row.kelurahan: (row.lat, row.lon) for row in df.itertuples(index=False)}
 
 
+@st.cache_data(show_spinner="Memuat data centroid...")
+def fetch_all_centroid() -> pd.DataFrame:
+    engine = get_engine()
+    return pd.read_sql(f"SELECT * FROM {GEO_TABLE} ORDER BY kecamatan, kelurahan", engine)
+
+
+def delete_centroid(row_id: int) -> None:
+    engine = get_engine()
+    with engine.begin() as conn:
+        conn.execute(text(f"DELETE FROM {GEO_TABLE} WHERE id = :id"), {"id": int(row_id)})
+
+
 def upsert_centroid(kecamatan: str, kelurahan: str, lat: float, lon: float) -> None:
     engine = get_engine()
     with engine.begin() as conn:
