@@ -9,8 +9,11 @@ import plotly.graph_objects as go
 import folium
 import json
 import os
+import io
 from streamlit_folium import st_folium
 from folium.plugins import Fullscreen
+
+import db
 
 try:
     import geopandas as gpd
@@ -60,93 +63,31 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # ════════════════════════════════════════════════════════════
-# DATA KELURAHAN
+# DATA KELURAHAN (dari database MySQL)
 # ════════════════════════════════════════════════════════════
-DATA_KEL = {
-    "BOGOR BARAT": {
-        "BALUMBANG JAYA":  {"r2022":2195,"r2023":2261,"r2024":2202,"r2025":2528},
-        "BUBULAK":         {"r2022":3338,"r2023":3353,"r2024":3361,"r2025":3856},
-        "CILENDEK BARAT":  {"r2022":3811,"r2023":3772,"r2024":3844,"r2025":4286},
-        "CILENDEK TIMUR":  {"r2022":4027,"r2023":3988,"r2024":4066,"r2025":4425},
-        "CURUG":           {"r2022":2665,"r2023":2629,"r2024":2660,"r2025":3041},
-        "CURUG MEKAR":     {"r2022":2845,"r2023":2783,"r2024":2807,"r2025":3137},
-        "GUNUNG BATU":     {"r2022":3774,"r2023":3751,"r2024":3608,"r2025":4154},
-        "LOJI":            {"r2022":2900,"r2023":2909,"r2024":2930,"r2025":3251},
-        "MARGA JAYA":      {"r2022":1404,"r2023":1411,"r2024":1446,"r2025":1610},
-        "MENTENG":         {"r2022":3915,"r2023":3852,"r2024":3798,"r2025":4228},
-        "PASIR JAYA":      {"r2022":3393,"r2023":3328,"r2024":3287,"r2025":3790},
-        "PASIR KUDA":      {"r2022":3268,"r2023":3268,"r2024":3247,"r2025":3598},
-        "PASIR MULYA":     {"r2022":1285,"r2023":1312,"r2024":1344,"r2025":1379},
-        "SEMPLAK":         {"r2022":2459,"r2023":2499,"r2024":2432,"r2025":2819},
-        "SINDANG BARANG":  {"r2022":3757,"r2023":3711,"r2024":3756,"r2025":4337},
-        "SITU GEDE":       {"r2022":1838,"r2023":1818,"r2024":1863,"r2025":2154},
-    },
-    "BOGOR SELATAN": {
-        "BATUTULIS":       {"r2022":1868,"r2023":1813,"r2024":1792,"r2025":2054},
-        "BOJONG KERTA":    {"r2022":1319,"r2023":1314,"r2024":1322,"r2025":1785},
-        "BONDONGAN":       {"r2022":2298,"r2023":2314,"r2024":2270,"r2025":2582},
-        "CIKARET":         {"r2022":3500,"r2023":3445,"r2024":3534,"r2025":3972},
-        "CIPAKU":          {"r2022":2554,"r2023":2480,"r2024":2438,"r2025":2886},
-        "EMPANG":          {"r2022":3041,"r2023":2982,"r2024":2912,"r2025":3283},
-        "GENTENG":         {"r2022":1455,"r2023":1448,"r2024":1461,"r2025":1818},
-        "HARJASARI":       {"r2022":2151,"r2023":2113,"r2024":2189,"r2025":2617},
-        "KERTAMAYA":       {"r2022":1035,"r2023":1030,"r2024":1085,"r2025":1256},
-        "LAWANG GINTUNG":  {"r2022":2216,"r2023":2158,"r2024":2110,"r2025":2284},
-        "MUARASARI":       {"r2022":1832,"r2023":1836,"r2024":1849,"r2025":2154},
-        "MULYAHARJA":      {"r2022":3175,"r2023":3271,"r2024":3384,"r2025":4101},
-        "PAKUAN":          {"r2022":985, "r2023":1032,"r2024":997, "r2025":1158},
-        "PAMOYANAN":       {"r2022":2546,"r2023":2610,"r2024":2719,"r2025":3254},
-        "RANCAMAYA":       {"r2022":1094,"r2023":1118,"r2024":1274,"r2025":1502},
-        "RANGGA MEKAR":    {"r2022":2626,"r2023":2633,"r2024":2678,"r2025":3161},
-    },
-    "BOGOR TENGAH": {
-        "BABAKAN":         {"r2022":1691,"r2023":1691,"r2024":1659,"r2025":1854},
-        "BABAKAN PASAR":   {"r2022":1832,"r2023":1773,"r2024":1764,"r2025":1903},
-        "CIBOGOR":         {"r2022":1820,"r2023":1767,"r2024":1671,"r2025":1835},
-        "CIWARINGIN":      {"r2022":1688,"r2023":1620,"r2024":1637,"r2025":1854},
-        "GUDANG":          {"r2022":1227,"r2023":1212,"r2024":1211,"r2025":1314},
-        "KEBON KALAPA":    {"r2022":1971,"r2023":1986,"r2024":1943,"r2025":2101},
-        "PABATON":         {"r2022":1535,"r2023":1405,"r2024":1415,"r2025":1423},
-        "PALEDANG":        {"r2022":1925,"r2023":1928,"r2024":1874,"r2025":2156},
-        "PANARAGAN":       {"r2022":1413,"r2023":1375,"r2024":1382,"r2025":1590},
-        "SEMPUR":          {"r2022":1566,"r2023":1532,"r2024":1474,"r2025":1685},
-        "TEGALLEGA":       {"r2022":3453,"r2023":3416,"r2024":3371,"r2025":3795},
-    },
-    "BOGOR TIMUR": {
-        "BARANANGSIANG":   {"r2022":5610,"r2023":5448,"r2024":5346,"r2025":6074},
-        "KATULAMPA":       {"r2022":5648,"r2023":5618,"r2024":5812,"r2025":6655},
-        "SINDANG RASA":    {"r2022":2906,"r2023":2876,"r2024":2947,"r2025":3423},
-        "SINDANG SARI":    {"r2022":1622,"r2023":1591,"r2024":1625,"r2025":1931},
-        "SUKASARI":        {"r2022":2548,"r2023":2511,"r2024":2341,"r2025":2525},
-        "TAJUR":           {"r2022":1515,"r2023":1475,"r2024":1444,"r2025":1540},
-    },
-    "BOGOR UTARA": {
-        "BANTAR JATI":     {"r2022":5130,"r2023":5031,"r2024":5145,"r2025":5671},
-        "CIBULUH":         {"r2022":4503,"r2023":4503,"r2024":4442,"r2025":5173},
-        "CILUAR":          {"r2022":3347,"r2023":3298,"r2024":3377,"r2025":3959},
-        "CIMAHPAR":        {"r2022":3742,"r2023":3824,"r2024":4023,"r2025":4825},
-        "CIPARIGI":        {"r2022":5626,"r2023":5642,"r2024":5757,"r2025":6504},
-        "KEDUNG HALANG":   {"r2022":4774,"r2023":4726,"r2024":4680,"r2025":5195},
-        "TANAH BARU":      {"r2022":5313,"r2023":5214,"r2024":5271,"r2025":6101},
-        "TEGALGUNDIL":     {"r2022":5788,"r2023":5809,"r2024":5784,"r2025":6544},
-    },
-    "TANAH SAREAL": {
-        "CIBADAK":         {"r2022":5575,"r2023":5589,"r2024":5614,"r2025":6440},
-        "KAYU MANIS":      {"r2022":2884,"r2023":2896,"r2024":2918,"r2025":3413},
-        "KEBON PEDES":     {"r2022":4793,"r2023":4622,"r2024":4592,"r2025":5215},
-        "KEDUNG BADAK":    {"r2022":6151,"r2023":6055,"r2024":6018,"r2025":6628},
-        "KEDUNG JAYA":     {"r2022":2609,"r2023":2581,"r2024":2577,"r2025":2849},
-        "KEDUNG WARINGIN": {"r2022":4981,"r2023":4922,"r2024":4943,"r2025":5413},
-        "KENCANA":         {"r2022":3959,"r2023":4049,"r2024":4296,"r2025":4980},
-        "MEKAR WANGI":     {"r2022":4409,"r2023":4535,"r2024":4705,"r2025":5476},
-        "SUKA DAMAI":      {"r2022":2946,"r2023":3018,"r2024":2987,"r2025":3644},
-        "SUKARESMI":       {"r2022":2553,"r2023":2595,"r2024":2641,"r2025":3082},
-        "TANAH SAREAL":    {"r2022":3123,"r2023":2957,"r2024":2738,"r2025":3101},
-    },
-}
+TAHUN_LIST = [2022, 2023, 2024, 2025]
 
-# Rekap per kecamatan (otomatis dihitung dari DATA_KEL)
-TOTAL_KOTA = {2022: 202745, 2023: 201332, 2024: 202089, 2025: 230331}
+
+@st.cache_data(show_spinner="Memuat data dari database...")
+def load_data():
+    """Ambil tabel r2_data dari MySQL dan bentuk struktur nested
+    {kecamatan: {kelurahan: {"r2022":.., "r2023":.., ...}}}, plus total kota per tahun."""
+    df = db.fetch_all()
+    data_kel = {}
+    for row in df.itertuples(index=False):
+        kec_dict = data_kel.setdefault(row.kecamatan, {})
+        kel_dict = kec_dict.setdefault(row.kelurahan, {})
+        kel_dict[f"r{row.tahun}"] = int(row.jumlah)
+    total_kota = {yr: int(df.loc[df["tahun"] == yr, "jumlah"].sum()) for yr in TAHUN_LIST}
+    return data_kel, total_kota
+
+
+try:
+    DATA_KEL, TOTAL_KOTA = load_data()
+except Exception as e:
+    st.error(f"❌ Gagal terhubung ke database MySQL: {e}")
+    st.stop()
+
 KECAMATAN  = list(DATA_KEL.keys())
 COLORS_KEC = ["#bd0026","#e31a1c","#fc4e2a","#fd8d3c","#feb24c","#fed976"]
 SHP_PATH   = os.path.join("data","Kota_bogor.shp")
@@ -196,6 +137,16 @@ def choropleth_color(val: int, year: int) -> str:
         if val >= 25000: return "#fd8d3c"
         if val >= 20000: return "#feb24c"
         return "#fed976"
+
+def choropleth_color_kel(val: int) -> str:
+    """Skala warna untuk choropleth level kelurahan (nilai jauh lebih kecil
+    daripada total kecamatan)."""
+    if val >= 6000: return "#bd0026"
+    if val >= 5000: return "#e31a1c"
+    if val >= 4000: return "#fc4e2a"
+    if val >= 3000: return "#fd8d3c"
+    if val >= 2000: return "#feb24c"
+    return "#fed976"
 
 def linear_proj(values: list) -> int:
     n = len(values); xs = list(range(n))
@@ -268,27 +219,36 @@ def page_header(title: str, subtitle: str = "") -> None:
     st.markdown(f'<div class="main-header"><h2 style="margin:0;">{title}</h2>{sub}</div>',
                 unsafe_allow_html=True)
 
-@st.cache_data(show_spinner="Memuat batas wilayah...")
+def _norm_nama(s: str) -> str:
+    return str(s).strip().upper().replace(" ", "")
+
+
+@st.cache_data(show_spinner="Memuat batas wilayah per kelurahan...")
 def load_geodata(year: int) -> tuple:
+    """Choropleth level kelurahan langsung dari data/Kota_bogor.shp (68 polygon).
+    Tiap polygon kelurahan diberi warna sesuai jumlah R2 kelurahan itu sendiri
+    (bukan total kecamatannya)."""
     total = TOTAL_KOTA[year]
-    def enrich(gj):
+    kelurahan_by_norm = {_norm_nama(kel): (kec, kel)
+                          for kec, kels in DATA_KEL.items() for kel in kels}
+
+    def enrich(gj, kel_field="DESA", kec_field="KECAMATAN"):
         feats = []
         for feat in gj["features"]:
-            p    = feat.get("properties",{})
-            nama = ""
-            for k in ("NAMOBJ","NAMA_KEC","KECAMATAN","NAMA","NAME"):
-                if k in p:
-                    nama = str(p[k]).upper().strip(); break
-            val  = kec_total(nama, year) if nama in DATA_KEL else 0
-            pct  = round(val/total*100,2) if total>0 else 0
-            d22  = kec_total(nama,2022) if nama in DATA_KEL else 0
-            d25  = kec_total(nama,2025) if nama in DATA_KEL else 0
-            feats.append({"type":"Feature","geometry":feat["geometry"],
-                "properties":{**p,"nama":nama,"r2":val,"persen":pct,
-                    "warna":choropleth_color(val,year),
-                    "r2022":d22,"r2025":d25,
-                    "tumbuh":round((d25-d22)/d22*100,2) if d22>0 else 0}})
-        return {"type":"FeatureCollection","features":feats}
+            p = feat.get("properties", {})
+            match = kelurahan_by_norm.get(_norm_nama(p.get(kel_field, "")))
+            kec, kel = match if match else ("", "")
+            d = DATA_KEL.get(kec, {}).get(kel, {})
+            val = d.get(f"r{year}", 0)
+            pct = round(val / total * 100, 2) if total > 0 else 0
+            d22 = d.get("r2022", 0)
+            d25 = d.get("r2025", 0)
+            feats.append({"type": "Feature", "geometry": feat["geometry"],
+                "properties": {**p, "kecamatan": kec, "nama": kel, "r2": val, "persen": pct,
+                    "warna": choropleth_color_kel(val),
+                    "r2022": d22, "r2025": d25,
+                    "tumbuh": round((d25 - d22) / d22 * 100, 2) if d22 > 0 else 0}})
+        return {"type": "FeatureCollection", "features": feats}
 
     if HAS_GPD and os.path.exists(SHP_PATH):
         try:
@@ -298,7 +258,7 @@ def load_geodata(year: int) -> tuple:
             return enrich(json.loads(gdf.to_json())), "shapefile"
         except Exception:
             pass
-    return enrich(GEOJSON_FALLBACK), "fallback"
+    return enrich(GEOJSON_FALLBACK, kel_field="NAMOBJ"), "fallback"
 
 
 # ════════════════════════════════════════════════════════════
@@ -317,6 +277,7 @@ def main():
         "🏘️ Analisis Kelurahan",
         "📈 Proyeksi 2026",
         "🔍 Analisis Mendalam",
+        "🗄️ Kelola Data",
         "📋 Metodologi",
         "ℹ️ Tentang",
     ])
@@ -327,6 +288,7 @@ def main():
         "🏘️ Analisis Kelurahan": page_analisis_kel,
         "📈 Proyeksi 2026":      page_proyeksi,
         "🔍 Analisis Mendalam":  page_analisis_mendalam,
+        "🗄️ Kelola Data":        page_kelola_data,
         "📋 Metodologi":         page_metodologi,
         "ℹ️ Tentang":            page_tentang,
     }[menu]()
@@ -453,12 +415,9 @@ def page_peta():
         "Pilih Basemap:", list(BASEMAPS.keys()), index=0
     )
  
-    st.sidebar.markdown("### 🎨 Legenda")
-    leg = ([("≥ 50.000","#bd0026"),("40.000–49.999","#e31a1c"),("35.000–39.999","#fc4e2a"),
-            ("25.000–34.999","#fd8d3c"),("20.000–24.999","#feb24c"),("< 20.000","#fed976")]
-           if year==2025 else
-           [("≥ 40.000","#bd0026"),("35.000–39.999","#e31a1c"),("30.000–34.999","#fc4e2a"),
-            ("25.000–29.999","#fd8d3c"),("20.000–24.999","#feb24c"),("< 20.000","#fed976")])
+    st.sidebar.markdown("### 🎨 Legenda (per Kelurahan)")
+    leg = [("≥ 6.000","#bd0026"),("5.000–5.999","#e31a1c"),("4.000–4.999","#fc4e2a"),
+           ("3.000–3.999","#fd8d3c"),("2.000–2.999","#feb24c"),("< 2.000","#fed976")]
     for lbl, col in leg:
         st.sidebar.markdown(
             f'<div style="display:flex;align-items:center;gap:8px;margin:3px 0;">'
@@ -472,7 +431,7 @@ def page_peta():
     with col_map:
         geojson, source = load_geodata(year)
         if source == "shapefile":
-            st.success("✅ Batas wilayah dari shapefile")
+            st.success("✅ Batas wilayah per kelurahan dari shapefile (data/Kota_bogor.shp)")
         else:
             st.info("ℹ️ Batas wilayah approx — letakkan shapefile di `data/Kota_bogor.shp`")
  
@@ -535,16 +494,16 @@ def page_peta():
                     "weight":3.5,"fillOpacity":min(opacity+0.15,1.0)}
  
         folium.GeoJson(
-            geojson, name="Batas Kecamatan",
+            geojson, name="Batas Kelurahan",
             style_function=style_fn, highlight_function=hl_fn,
             tooltip=folium.GeoJsonTooltip(
-                fields=["nama","r2","persen","tumbuh"],
-                aliases=["Kecamatan:",f"R2 ({year}):","Kontribusi (%):","Tumbuh 22-25 (%):"],
+                fields=["nama","kecamatan","r2","persen","tumbuh"],
+                aliases=["Kelurahan:","Kecamatan:",f"R2 ({year}):","Kontribusi Kota (%):","Tumbuh 22-25 (%):"],
                 localize=True, sticky=True, labels=True,
                 style="background-color:white;color:#333;font-family:Arial;font-size:13px;padding:8px;border-radius:4px;"),
             popup=folium.GeoJsonPopup(
-                fields=["nama","r2022","r2","persen","tumbuh"],
-                aliases=["Kecamatan:","R2 2022:","R2 2025:","Kontribusi (%):","Tumbuh 22-25 (%):"],
+                fields=["nama","kecamatan","r2022","r2","persen","tumbuh"],
+                aliases=["Kelurahan:","Kecamatan:","R2 2022:","R2 2025:","Kontribusi Kota (%):","Tumbuh 22-25 (%):"],
                 localize=True, max_width=280),
         ).add_to(m)
  
@@ -583,50 +542,9 @@ def page_peta():
                 "BOGOR TENGAH":  "#fff",
                 "BOGOR TIMUR":   "#fff",
             }
-            # Koordinat centroid approx per kelurahan (lat, lon)
-            CENTROID_KEL = {
-                # BOGOR BARAT
-                "BALUMBANG JAYA":  (-6.5389, 106.7189), "BUBULAK":        (-6.5612, 106.7267),
-                "CILENDEK BARAT":  (-6.5634, 106.7501), "CILENDEK TIMUR": (-6.5578, 106.7612),
-                "CURUG":           (-6.5467, 106.7545), "CURUG MEKAR":    (-6.5345, 106.7523),
-                "GUNUNG BATU":     (-6.5789, 106.7378), "LOJI":           (-6.5845, 106.7534),
-                "MARGA JAYA":      (-6.5623, 106.7212), "MENTENG":        (-6.5756, 106.7645),
-                "PASIR JAYA":      (-6.5512, 106.7356), "PASIR KUDA":     (-6.5678, 106.7234),
-                "PASIR MULYA":     (-6.5734, 106.7134), "SEMPLAK":        (-6.5867, 106.7234),
-                "SINDANG BARANG":  (-6.5923, 106.7423), "SITU GEDE":      (-6.5534, 106.7167),
-                # TANAH SAREAL
-                "CIBADAK":         (-6.5412, 106.7789), "KAYU MANIS":     (-6.5523, 106.7867),
-                "KEBON PEDES":     (-6.5634, 106.7812), "KEDUNG BADAK":   (-6.5445, 106.7956),
-                "KEDUNG JAYA":     (-6.5356, 106.7901), "KEDUNG WARINGIN":(-6.5534, 106.7734),
-                "KENCANA":         (-6.5645, 106.7756), "MEKAR WANGI":    (-6.5723, 106.7845),
-                "SUKA DAMAI":      (-6.5589, 106.7956), "SUKARESMI":      (-6.5512, 106.8023),
-                "TANAH SAREAL":    (-6.5423, 106.7712),
-                # BOGOR UTARA
-                "BANTAR JATI":     (-6.5401, 106.8056), "CIBULUH":        (-6.5289, 106.8112),
-                "CILUAR":          (-6.5467, 106.8167), "CIMAHPAR":       (-6.5212, 106.8189),
-                "CIPARIGI":        (-6.5156, 106.8245), "KEDUNG HALANG":  (-6.5312, 106.8323),
-                "TANAH BARU":      (-6.5445, 106.8278), "TEGALGUNDIL":    (-6.5534, 106.8212),
-                # BOGOR TENGAH
-                "BABAKAN":         (-6.5878, 106.7967), "BABAKAN PASAR":  (-6.5934, 106.8034),
-                "CIBOGOR":         (-6.5823, 106.7923), "CIWARINGIN":     (-6.5812, 106.8067),
-                "GUDANG":          (-6.5912, 106.8112), "KEBON KALAPA":   (-6.5867, 106.8145),
-                "PABATON":         (-6.5778, 106.7989), "PALEDANG":       (-6.5978, 106.7989),
-                "PANARAGAN":       (-6.5834, 106.8034), "SEMPUR":         (-6.5956, 106.8156),
-                "TEGALLEGA":       (-6.6023, 106.8067),
-                # BOGOR TIMUR
-                "BARANANGSIANG":   (-6.5756, 106.8367), "KATULAMPA":      (-6.5623, 106.8456),
-                "SINDANG RASA":    (-6.5867, 106.8289), "SINDANG SARI":   (-6.5712, 106.8312),
-                "SUKASARI":        (-6.5978, 106.8312), "TAJUR":          (-6.6089, 106.8412),
-                # BOGOR SELATAN
-                "BATUTULIS":       (-6.6012, 106.7934), "BOJONG KERTA":   (-6.6289, 106.7845),
-                "BONDONGAN":       (-6.6123, 106.7823), "CIKARET":        (-6.5934, 106.7901),
-                "CIPAKU":          (-6.6334, 106.7712), "EMPANG":         (-6.5989, 106.7789),
-                "GENTENG":         (-6.6178, 106.8056), "HARJASARI":      (-6.6256, 106.8112),
-                "KERTAMAYA":       (-6.6412, 106.8167), "LAWANG GINTUNG": (-6.6089, 106.7956),
-                "MUARASARI":       (-6.6478, 106.7956), "MULYAHARJA":     (-6.6545, 106.8034),
-                "PAKUAN":          (-6.5867, 106.7845), "PAMOYANAN":      (-6.6045, 106.8189),
-                "RANCAMAYA":       (-6.6623, 106.8245), "RANGGA MEKAR":   (-6.6312, 106.8078),
-            }
+            # Koordinat centroid per kelurahan, dihitung otomatis dari shapefile
+            # dan disimpan di tabel kelurahan_geo (lihat scripts/import_centroid.py)
+            CENTROID_KEL = db.fetch_centroid_kel()
             for kec, kels in DATA_KEL.items():
                 for kel, d in kels.items():
                     val = d[f"r{year}"]
@@ -1154,6 +1072,145 @@ def page_analisis_mendalam():
         • Proyeksi 2026 menggunakan regresi linear sederhana; akurasi tergantung stabilitas tren
         </div>
         """, unsafe_allow_html=True)
+
+
+# ════════════════════════════════════════════════════════════
+# HALAMAN — KELOLA DATA (CRUD + Import CSV + Export Excel)
+# ════════════════════════════════════════════════════════════
+def _reload_after_write():
+    st.cache_data.clear()
+    st.rerun()
+
+
+def page_kelola_data():
+    page_header("🗄️ Kelola Data R2", "Tambah / Edit / Hapus / Import CSV / Export Excel — langsung ke MySQL")
+
+    df_raw = db.fetch_all()
+
+    tab1, tab2, tab3, tab4 = st.tabs(
+        ["➕ Tambah / Edit", "🗑️ Hapus", "📥 Import CSV", "📤 Export Excel"])
+
+    # ── TAMBAH / EDIT ─────────────────────────────────────────
+    with tab1:
+        st.markdown("#### Tambah atau Perbarui Data")
+        st.caption("Jika kombinasi Kecamatan + Kelurahan + Tahun sudah ada, jumlahnya akan ditimpa (update).")
+        with st.form("form_tambah_edit"):
+            c1, c2 = st.columns(2)
+            with c1:
+                kec_opt = sorted(set(df_raw["kecamatan"]).union({"(Kecamatan Baru)"}))
+                kec_pilih = st.selectbox("Kecamatan:", kec_opt)
+                kec_baru  = st.text_input("Nama Kecamatan Baru (jika pilih di atas):") if kec_pilih == "(Kecamatan Baru)" else None
+                tahun = st.selectbox("Tahun:", TAHUN_LIST, index=len(TAHUN_LIST) - 1)
+            with c2:
+                kelurahan = st.text_input("Kelurahan:")
+                jumlah    = st.number_input("Jumlah R2:", min_value=0, step=1)
+            submitted = st.form_submit_button("💾 Simpan")
+            if submitted:
+                kec_final = (kec_baru or "").strip() if kec_pilih == "(Kecamatan Baru)" else kec_pilih
+                if not kec_final or not kelurahan.strip():
+                    st.error("Kecamatan dan Kelurahan wajib diisi.")
+                else:
+                    db.upsert_row(kec_final, kelurahan, tahun, jumlah)
+                    st.success(f"Tersimpan: {kec_final} / {kelurahan.strip().upper()} / {tahun} = {jumlah:,}")
+                    _reload_after_write()
+
+        st.markdown("---")
+        st.markdown("#### Data Saat Ini")
+        st.dataframe(df_raw, use_container_width=True, hide_index=True)
+
+    # ── HAPUS ─────────────────────────────────────────────────
+    with tab2:
+        st.markdown("#### Hapus Baris Data")
+        if df_raw.empty:
+            st.info("Belum ada data.")
+        else:
+            df_raw["label"] = (df_raw["kecamatan"] + " / " + df_raw["kelurahan"]
+                                + " / " + df_raw["tahun"].astype(str)
+                                + " = " + df_raw["jumlah"].astype(str))
+            pilihan = st.multiselect("Pilih baris yang akan dihapus:", df_raw["id"],
+                                      format_func=lambda i: df_raw.loc[df_raw["id"] == i, "label"].iloc[0])
+            if pilihan and st.button("🗑️ Hapus Baris Terpilih", type="primary"):
+                for row_id in pilihan:
+                    db.delete_row(row_id)
+                st.success(f"{len(pilihan)} baris dihapus.")
+                _reload_after_write()
+
+    # ── IMPORT CSV ────────────────────────────────────────────
+    with tab3:
+        st.markdown("#### Import dari CSV")
+        st.caption(
+            "Mode **Data Ringkasan**: kolom `kecamatan, kelurahan, tahun, jumlah`.\n\n"
+            "Mode **Data Mentah/Transaksi** (mis. file pajak per kendaraan dengan kolom `KR`, `Kecamatan`, "
+            "`Kelurahan`): pilih tahun, sistem akan memfilter `KR == 'R2'` lalu menghitung jumlah per kelurahan otomatis.")
+        file = st.file_uploader("Pilih file CSV:", type=["csv"])
+        if file is not None:
+            try:
+                df_csv = pd.read_csv(file)
+            except Exception as e:
+                st.error(f"Gagal membaca CSV: {e}")
+                df_csv = None
+
+            if df_csv is not None:
+                cols_lower = {c.lower().strip(): c for c in df_csv.columns}
+
+                if {"kecamatan", "kelurahan", "tahun", "jumlah"}.issubset(cols_lower):
+                    st.success("Terdeteksi format Data Ringkasan.")
+                    df_prep = df_csv.rename(columns={
+                        cols_lower["kecamatan"]: "kecamatan",
+                        cols_lower["kelurahan"]: "kelurahan",
+                        cols_lower["tahun"]: "tahun",
+                        cols_lower["jumlah"]: "jumlah",
+                    })[["kecamatan", "kelurahan", "tahun", "jumlah"]]
+                    st.dataframe(df_prep.head(20), use_container_width=True, hide_index=True)
+                    st.caption(f"Total {len(df_prep)} baris siap di-import.")
+                    if st.button("✅ Import ke Database", key="import_ringkasan"):
+                        n = db.bulk_upsert(df_prep)
+                        st.success(f"{n} baris berhasil di-import.")
+                        _reload_after_write()
+
+                elif "kr" in cols_lower and "kecamatan" in cols_lower and "kelurahan" in cols_lower:
+                    st.success("Terdeteksi format Data Mentah/Transaksi.")
+                    tahun_import = st.selectbox("Data ini untuk tahun:", TAHUN_LIST, key="tahun_import_mentah")
+                    df_filt = df_csv[df_csv[cols_lower["kr"]].astype(str).str.strip().str.upper() == "R2"]
+                    df_agg = (df_filt.groupby([cols_lower["kecamatan"], cols_lower["kelurahan"]])
+                              .size().reset_index(name="jumlah"))
+                    df_agg.columns = ["kecamatan", "kelurahan", "jumlah"]
+                    df_agg["tahun"] = tahun_import
+                    df_agg["kecamatan"] = df_agg["kecamatan"].str.strip().str.upper()
+                    df_agg["kelurahan"] = df_agg["kelurahan"].str.strip().str.upper()
+                    st.markdown(f"**Hasil agregasi** ({len(df_filt):,} baris R2 dari {len(df_csv):,} total baris):")
+                    st.dataframe(df_agg, use_container_width=True, hide_index=True)
+                    if st.button("✅ Import Hasil Agregasi ke Database", key="import_mentah"):
+                        n = db.bulk_upsert(df_agg[["kecamatan", "kelurahan", "tahun", "jumlah"]])
+                        st.success(f"{n} baris berhasil di-import untuk tahun {tahun_import}.")
+                        _reload_after_write()
+                else:
+                    st.error(
+                        "Format kolom tidak dikenali. Pastikan CSV punya kolom "
+                        "`kecamatan, kelurahan, tahun, jumlah` (data ringkasan) atau "
+                        "`KR, Kecamatan, Kelurahan` (data mentah transaksi).")
+
+    # ── EXPORT EXCEL ──────────────────────────────────────────
+    with tab4:
+        st.markdown("#### Export ke Excel")
+        kec_filter = st.multiselect("Filter Kecamatan (kosongkan = semua):", KECAMATAN)
+        tahun_filter = st.multiselect("Filter Tahun (kosongkan = semua):", TAHUN_LIST)
+
+        df_export = df_raw.copy()
+        if kec_filter:
+            df_export = df_export[df_export["kecamatan"].isin(kec_filter)]
+        if tahun_filter:
+            df_export = df_export[df_export["tahun"].isin(tahun_filter)]
+
+        st.dataframe(df_export, use_container_width=True, hide_index=True)
+
+        buf = io.BytesIO()
+        with pd.ExcelWriter(buf, engine="openpyxl") as writer:
+            df_export.to_excel(writer, index=False, sheet_name="r2_data")
+        st.download_button(
+            "⬇️ Unduh Excel (.xlsx)", buf.getvalue(),
+            "r2_data_export.xlsx",
+            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
 
 
 # ════════════════════════════════════════════════════════════

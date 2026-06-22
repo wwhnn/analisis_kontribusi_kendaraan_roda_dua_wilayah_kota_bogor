@@ -1,214 +1,137 @@
-# R2 Analytics — Implementation Plan
+# R2 Analytics — Database Implementation (MySQL Online)
 
 ## Ringkasan
 
-Dokumen ini merinci langkah implementasi menambahkan database SQLite dan sistem CRUD ke aplikasi `app.py`, termasuk skrip impor dari file Excel (`2023.xlsx`), lapisan data (SQLAlchemy), antarmuka CRUD di Streamlit, dan instruksi menjalankan.
+Aplikasi `app.py` sudah dipindahkan dari dictionary hardcoded `DATA_KEL` ke
+database MySQL online (`sql12831186` di `sql12.freesqldatabase.com`), lengkap
+dengan fitur CRUD, import CSV, dan export Excel langsung dari Streamlit.
 
-## Tujuan
+## Skema Database
 
-- Memindahkan data statis ke database SQLite.
-- Menyediakan skrip import dari Excel (pandas + openpyxl).
-- Menyediakan API/lapisan data menggunakan SQLAlchemy.
-- Menambah UI CRUD di Streamlit untuk `Kecamatan`, `Kelurahan`, dan data jumlah R2 per tahun.
-- Menyediakan fitur upload Excel & ekspor CSV.
-
-## Asumsi
-
-- Workspace root: aplikasi dijalankan dari folder ini (ada `app.py`).
-- File Excel contoh: `2023.xlsx` tersedia (kolom minimal: `Kecamatan`, `Kelurahan`, `Tahun`, `Jumlah`).
-- Target DB: SQLite (`data/r2_kota_bogor.db`).
-
-## Teknologi & Dependensi
-
-- Python 3.10+
-- Streamlit
-- pandas
-- openpyxl
-- SQLAlchemy
-- alembic (opsional untuk migrasi)
-- geopandas (opsional, jika ada shapefile)
-
-Update `requirements.txt` menambahkan bila perlu:
-
-```
-pandas
-openpyxl
-SQLAlchemy
-alembic
-geopandas
-```
-
-## Database Schema (SQLite)
-
-Tabel utama:
-
-- `kecamatan`
-  - `id` INTEGER PRIMARY KEY
-  - `nama` TEXT UNIQUE NOT NULL
-  - `centroid_lat` REAL
-  - `centroid_lon` REAL
-- `kelurahan`
-  - `id` INTEGER PRIMARY KEY
-  - `kecamatan_id` INTEGER REFERENCES kecamatan(id) ON DELETE CASCADE
-  - `nama` TEXT NOT NULL
-- `r2_counts`
-  - `id` INTEGER PRIMARY KEY
-  - `kelurahan_id` INTEGER REFERENCES kelurahan(id) ON DELETE CASCADE
-  - `tahun` INTEGER NOT NULL
-  - `jumlah` INTEGER NOT NULL
-  - UNIQUE(kelurahan_id, tahun)
-
-Contoh SQL (SQLite):
+Dua tabel di database `sql12831186`:
 
 ```sql
-CREATE TABLE kecamatan (
-  id INTEGER PRIMARY KEY,
-  nama TEXT UNIQUE NOT NULL,
-  centroid_lat REAL,
-  centroid_lon REAL
+CREATE TABLE r2_data (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  kecamatan VARCHAR(50) NOT NULL,
+  kelurahan VARCHAR(50) NOT NULL,
+  tahun INT NOT NULL,
+  jumlah INT NOT NULL,
+  UNIQUE KEY uniq_kk_tahun (kecamatan, kelurahan, tahun)
 );
-CREATE TABLE kelurahan (
-  id INTEGER PRIMARY KEY,
-  kecamatan_id INTEGER NOT NULL,
-  nama TEXT NOT NULL,
-  FOREIGN KEY(kecamatan_id) REFERENCES kecamatan(id) ON DELETE CASCADE
-);
-CREATE TABLE r2_counts (
-  id INTEGER PRIMARY KEY,
-  kelurahan_id INTEGER NOT NULL,
-  tahun INTEGER NOT NULL,
-  jumlah INTEGER NOT NULL,
-  UNIQUE(kelurahan_id, tahun),
-  FOREIGN KEY(kelurahan_id) REFERENCES kelurahan(id) ON DELETE CASCADE
+
+CREATE TABLE kelurahan_geo (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  kecamatan VARCHAR(50) NOT NULL,
+  kelurahan VARCHAR(50) NOT NULL,
+  lat DOUBLE NOT NULL,
+  lon DOUBLE NOT NULL,
+  UNIQUE KEY uniq_kel (kecamatan, kelurahan)
 );
 ```
 
-## SQLAlchemy Models (sketsa)
+`r2_data`: satu baris = jumlah kendaraan R2 di satu kelurahan pada satu tahun.
+`kelurahan_geo`: satu baris = titik centroid (lat/lon) satu kelurahan, dipakai
+untuk label marker di peta — menggantikan dict `CENTROID_KEL` yang dulu
+hardcoded di `app.py`.
 
-- `Kecamatan` model
-- `Kelurahan` model (relationship ke Kecamatan)
-- `R2Count` model (relationship ke Kelurahan)
+## Struktur File
 
-Simpan model di `models.py`.
+- `db.py` — layer koneksi & query:
+  - `get_engine()` — SQLAlchemy engine ke MySQL (`pymysql`), cached via `st.cache_resource`.
+  - `init_schema()` — `CREATE TABLE IF NOT EXISTS`.
+  - `fetch_all()` — ambil semua baris, cached via `st.cache_data`.
+  - `upsert_row(kecamatan, kelurahan, tahun, jumlah)` — insert/update 1 baris.
+  - `delete_row(id)` — hapus 1 baris.
+  - `delete_by_year(tahun)` — hapus semua baris 1 tahun (dipakai sebelum re-import data riil 1 tahun).
+  - `bulk_upsert(df)` — insert/update banyak baris sekaligus (dipakai import CSV & import xlsx).
+- `scripts/import_xlsx.py` — **sumber data utama**. Membaca file mentah
+  `data/{tahun}.xlsx` (1 baris per kendaraan: `Nopol, Alamat, KR, Kecamatan,
+  Kelurahan, ...`), mendeteksi otomatis baris header (posisi & urutan kolom
+  berbeda-beda antar file tahun), memfilter `KR == "R2"`, agregasi
+  `groupby(Kecamatan, Kelurahan).size()` per tahun, lalu replace data tahun
+  tersebut di tabel `r2_data`. Jalankan `python scripts/import_xlsx.py` untuk
+  semua tahun, atau `--year 2025` untuk satu tahun saja.
+- `scripts/import_centroid.py` — hitung centroid (titik tengah polygon) setiap
+  kelurahan otomatis dari `data/Kota_bogor.shp` (`geometry.centroid`), cocokkan
+  namanya ke `r2_data` (normalisasi spasi, mis. "BANTARJATI" ↔ "BANTAR JATI"),
+  lalu simpan ke tabel `kelurahan_geo`. Dipakai oleh halaman Peta Interaktif
+  (`db.fetch_centroid_kel()`) untuk menempatkan label kelurahan — tidak perlu
+  lagi koordinat hardcoded di kode.
+- `.streamlit/secrets.toml` — kredensial MySQL (**di-gitignore**, jangan pernah commit).
+- `.streamlit/secrets.toml.example` — template kosong untuk setup di lingkungan lain.
+- `.streamlit/config.toml` — `maxUploadSize = 500` (MB), agar import CSV mentah berukuran besar tidak kena limit kecil seperti di phpMyAdmin.
 
-## Skrip Inisialisasi DB
+## Kredensial
 
-File: `scripts/init_db.py`
+Kredensial dibaca dari `st.secrets["mysql"]` (lihat `.streamlit/secrets.toml`):
+`host`, `port`, `database`, `user`, `password`. Untuk menjalankan script di luar
+Streamlit (`scripts/seed_db.py`), `db.py` tetap membaca file `secrets.toml` yang
+sama (atau fallback ke environment variable `MYSQL_HOST`, `MYSQL_PORT`, dst).
 
-- Membuat folder `data/` jika belum ada.
-- Membuat file DB `data/r2_kota_bogor.db` jika belum ada.
-- Menginisialisasi schema (SQLAlchemy `Base.metadata.create_all(engine)`).
-- Menyediakan opsi `--seed` untuk memasukkan geojson fallback + centroid dari `app.py`.
+## Alur Data di `app.py`
 
-Contoh run:
+- `load_data()` — query `db.fetch_all()`, bentuk ulang jadi nested dict
+  `{kecamatan: {kelurahan: {"r2022":.., "r2023":.., ...}}}` (struktur sama
+  seperti `DATA_KEL` sebelumnya) + hitung `TOTAL_KOTA` (sum per tahun) secara
+  otomatis. Di-cache dengan `st.cache_data`.
+- Variabel module-level `DATA_KEL`, `TOTAL_KOTA`, `KECAMATAN` diisi dari
+  `load_data()` saat script dijalankan — seluruh fungsi halaman lain
+  (`kec_total`, `build_kec_df`, `build_kel_df`, `load_geodata`, dst) tidak
+  berubah karena tetap memakai variabel global ini.
+- Tahun masih diasumsikan `[2022, 2023, 2024, 2025]` (`TAHUN_LIST`) karena
+  banyak chart men-hardcode 4 tahun ini — menambah tahun baru perlu
+  penyesuaian chart terkait, di luar scope perubahan ini.
+- Setiap aksi tulis (tambah/edit/hapus/import) memanggil `st.cache_data.clear()`
+  lalu `st.rerun()` supaya seluruh dashboard langsung sinkron dengan data baru.
 
-```bash
-python scripts/init_db.py --seed
-```
+## Halaman "🗄️ Kelola Data"
 
-## Skrip Import Excel
+Ditambahkan ke menu sidebar, berisi 4 tab:
 
-File: `scripts/import_excel.py`
+1. **Tambah/Edit** — form pilih/ketik Kecamatan, Kelurahan, Tahun, Jumlah →
+   `db.upsert_row`.
+2. **Hapus** — pilih baris dari multiselect → `db.delete_row`.
+3. **Import CSV** — `st.file_uploader`, mendeteksi otomatis 2 format:
+   - *Data ringkasan* (`kecamatan, kelurahan, tahun, jumlah`) → langsung
+     `db.bulk_upsert`.
+   - *Data mentah/transaksi* (kolom `KR`, `Kecamatan`, `Kelurahan` — seperti
+     file pajak kendaraan asli) → filter `KR == "R2"`, agregasi
+     `groupby(Kecamatan, Kelurahan).size()`, preview, lalu `db.bulk_upsert`.
+     Ini menggantikan upaya upload CSV mentah lewat phpMyAdmin yang gagal
+     karena limit ukuran upload 2MB — proses agregasi & insert dilakukan di
+     Python/Streamlit yang tidak punya limit kecil seperti itu.
+4. **Export Excel** — generate `.xlsx` (pandas `to_excel` + `openpyxl` via
+   `io.BytesIO`) dari tabel `r2_data`, dengan filter opsional Kecamatan/Tahun.
 
-- Argumen: `--file 2023.xlsx`, `--sheet` (opsional), `--year` (opsional).
-- Baca dengan `pandas.read_excel(..., engine='openpyxl')`.
-- Harus melakukan normalisasi nama (strip, upper) untuk mencocokkan `Kecamatan` & `Kelurahan`.
-- Untuk setiap baris: pastikan `Kecamatan` ada di tabel kecamatan (insert jika tidak), pastikan `Kelurahan` ada (hubungkan ke kecamatan), lalu insert/update `r2_counts` untuk `tahun`.
-- Mode `--dry-run` untuk preview.
-
-Contoh run:
-
-```bash
-python scripts/import_excel.py --file data/2023.xlsx
-```
-
-## Refactor `app.py` (lapisan data)
-
-- Tambahkan modul `db.py` untuk koordinasi engine dan session maker.
-- Ganti konstanta `DATA_KEL`, `TOTAL_KOTA`, dsb. dengan fungsi pembacaan dari DB:
-  - `get_kecamatan_summary(year)` mengembalikan ringkasan per kecamatan
-  - `get_kelurahan_list(kecamatan=None)` mengembalikan dataframe kelurahan
-  - `get_geojson_from_shapefile()` tetap dipertahankan, namun fallback baca dari DB jika tersedia
-- Gunakan caching (`@st.cache_data`) di layer baca DB untuk performa.
-
-## UI CRUD di Streamlit
-
-Halaman baru/sektion di sidebar: "🛠️ Admin Data"
-Fitur:
-
-- Tampilkan tabel `kecamatan` dengan tombol `Edit` dan `Delete`.
-- Form `Tambah Kecamatan` (nama, centroid lat/lon).
-- Untuk `Kelurahan`: filter by kecamatan, list kelurahan, form tambah/edit/delete.
-- Untuk `R2Counts`: form tambah/edit (pilih kecamatan -> kelurahan -> tahun -> jumlah), juga opsi bulk-import via Excel.
-- Semua operasi melakukan commit ke DB menggunakan SQLAlchemy session.
-
-Contoh fungsi:
-
-- `create_kecamatan(name, lat=None, lon=None)`
-- `update_kecamatan(id, **fields)`
-- `delete_kecamatan(id)`
-- `create_kelurahan(kecamatan_id, name)`
-- `upsert_r2count(kelurahan_id, tahun, jumlah)`
-
-## Upload/Import & Ekspor
-
-- Upload Excel: gunakan `st.file_uploader` dan jalankan routine import dari `pandas.DataFrame` serupa `scripts/import_excel.py`.
-- Ekspor CSV: tombol `st.download_button` untuk mengekspor hasil query (kecamatan/kelurahan/r2_counts).
-
-## Update Peta & Analisis
-
-- Ubah fungsi load_geodata dan pembentukan `geojson` agar atribut `r2`, `persen`, `tumbuh` dihitung dari DB (agg per kecamatan/kelurahan).
-- Tetap gunakan `GEOJSON_FALLBACK` bila shapefile tidak tersedia.
-
-## Migrasi dan Seed
-
-- Simpel: `scripts/init_db.py --seed` untuk seed dari `GEOJSON_FALLBACK` dan `DATA_KEL` jika diperlukan.
-- Opsional: gunakan `alembic` untuk migrasi skema lebih lanjut.
-
-## Struktur File yang Disarankan
-
-- `app.py` (refactor agar import dari `db.py` & `models.py`)
-- `models.py` (SQLAlchemy models)
-- `db.py` (engine/session)
-- `scripts/init_db.py` (inisialisasi + seed)
-- `scripts/import_excel.py` (import Excel ke DB)
-- `data/r2_kota_bogor.db` (SQLite DB)
-- `IMPLEMENTATION_PLAN.md` (this file)
-
-## Testing & Validasi
-
-- Skrip unit test minimal di `tests/test_import.py` — validasi parsing Excel dan insert ke DB (sqlite-memory).
-- Manual test: import `data/2023.xlsx`, jalankan `streamlit run app.py`, cek halaman Admin CRUD, Peta dan Analisis menampilkan data baru.
-
-## Perintah Cepat
-
-- Inisialisasi DB & seed:
+## Setup & Menjalankan
 
 ```bash
-python scripts/init_db.py --seed
-```
+pip install -r requirements.txt
 
-- Import Excel:
+# isi .streamlit/secrets.toml dengan kredensial MySQL (lihat secrets.toml.example)
 
-```bash
-python scripts/import_excel.py --file data/2023.xlsx
-```
+# import data riil dari file mentah data/2022.xlsx .. data/2025.xlsx
+python scripts/import_xlsx.py
 
-- Jalankan streamlit:
+# hitung & simpan centroid kelurahan dari shapefile (sekali saja)
+python scripts/import_centroid.py
 
-```bash
+# jalankan aplikasi
 streamlit run app.py
 ```
 
-## Checklist Implementasi (mapping ke TODO)
+## Verifikasi yang Sudah Dilakukan
 
-- [ ] `scripts/init_db.py` + models (`models.py`, `db.py`)
-- [ ] `scripts/import_excel.py`
-- [ ] Refactor `app.py` untuk membaca DB
-- [ ] Streamlit Admin CRUD
-- [ ] Upload/Export fitur
-- [ ] Tests dan README
-
----
-
-Jika Anda setuju, saya bisa langsung mulai membuat file `models.py`, `db.py`, dan `scripts/init_db.py` selanjutnya mengimplementasikan skrip import `scripts/import_excel.py`.
+- `scripts/import_xlsx.py` dijalankan untuk 2022–2025: setiap file mentah
+  (284k–317k baris) difilter `KR == "R2"` dan diagregasi menjadi 68 baris per
+  tahun (272 total). Total R2 per tahun hasil agregasi data riil **cocok
+  100%** dengan nilai yang dulu dipakai di aplikasi: 202.745 (2022) /
+  201.332 (2023) / 202.089 (2024) / 230.331 (2025) — mengonfirmasi logika
+  filter & agregasi benar.
+- Semua 9 halaman (`Beranda` s.d. `Tentang`, termasuk `Kelola Data`) dites via
+  `streamlit.testing.v1.AppTest` tanpa exception, baik dengan data seed
+  maupun setelah diganti data riil dari xlsx.
+- Form Tambah/Edit, `upsert_row`, `delete_row`, dan `bulk_upsert` dites
+  langsung terhadap MySQL online (insert → verifikasi via `fetch_all` →
+  hapus → tabel kembali ke jumlah baris semula).
