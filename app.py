@@ -14,6 +14,7 @@ from streamlit_folium import st_folium
 from folium.plugins import Fullscreen
 
 import db
+import auth
 
 try:
     import geopandas as gpd
@@ -269,6 +270,8 @@ def main():
         '<div style="background:#b71c1c;color:#fff;padding:12px;border-radius:6px;'
         'text-align:center;margin-bottom:14px;font-size:14px;">'
         '<b>🏍️ R2 Analytics – Kota Bogor</b></div>', unsafe_allow_html=True)
+    
+    auth.render_login_sidebar() 
 
     menu = st.sidebar.radio("Pilih Halaman:", [
         "🏠 Beranda",
@@ -288,7 +291,7 @@ def main():
         "🏘️ Analisis Kelurahan": page_analisis_kel,
         "📈 Proyeksi 2026":      page_proyeksi,
         "🔍 Analisis Mendalam":  page_analisis_mendalam,
-        "🗄️ Kelola Data":        page_kelola_data,
+        "🗄️ Kelola Data":        auth.require_admin(page_kelola_data),
         "📋 Metodologi":         page_metodologi,
         "ℹ️ Tentang":            page_tentang,
     }[menu]()
@@ -299,7 +302,7 @@ def main():
 # ════════════════════════════════════════════════════════════
 def page_beranda():
     page_header("🏍️ R2 Analytics – Kota Bogor",
-                "Analisis Spasial Kendaraan Roda Dua (R2) Kota Bogor 2022–2025")
+                "System sebaran kontribusi pajak Kendaraan Roda Dua (R2) Kota Bogor 2022–2025")
 
     # KPI row
     c1,c2,c3,c4 = st.columns(4)
