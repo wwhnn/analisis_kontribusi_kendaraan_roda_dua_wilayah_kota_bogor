@@ -16,6 +16,11 @@ def _secret(key: str, default: str = None) -> str:
 
 @st.cache_resource(show_spinner=False)
 def get_engine():
+    @st.cache_resource(show_spinner=False)
+def get_engine():
+    st.write("Secrets keys:", list(st.secrets.keys()))
+    st.write("MySQL section:", st.secrets.get("mysql", "TIDAK DITEMUKAN"))
+
     host = _secret("host")
     port = _secret("port", "3306")
     name = _secret("database")
