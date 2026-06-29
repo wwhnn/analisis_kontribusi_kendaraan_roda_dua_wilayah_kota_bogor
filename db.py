@@ -16,8 +16,7 @@ def _secret(key: str, default: str = None) -> str:
 
 @st.cache_resource(show_spinner=False)
 def get_engine():
-    st.write("Secrets keys:", list(st.secrets.keys()))
-    st.write("MySQL section:", st.secrets.get("mysql", "TIDAK DITEMUKAN"))
+    st.error(f"ALL SECRETS = {dict(st.secrets)}")
 
     host = _secret("host")
     port = _secret("port", "3306")
@@ -25,16 +24,16 @@ def get_engine():
     user = _secret("user")
     password = _secret("password")
 
+    st.error(
+        f"host={host}, port={port}, database={name}, user={user}, password_set={password is not None}"
+    )
+
     url = (
         f"mysql+pymysql://{user}:{password}"
         f"@{host}:{port}/{name}?charset=utf8mb4"
     )
 
-    return create_engine(
-        url,
-        pool_pre_ping=True,
-        pool_recycle=280,
-    )
+    return create_engine(url, pool_pre_ping=True, pool_recycle=280)
 
 
 def init_schema():
