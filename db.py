@@ -16,13 +16,22 @@ def _secret(key: str, default: str = None) -> str:
 
 @st.cache_resource(show_spinner=False)
 def get_engine():
-    host = _secret("sql12.freesqldatabase.com")
+    host = _secret("host")
     port = _secret("port", "3306")
-    name = _secret("sql12831186")
-    user = _secret("sql12831186")
-    password = _secret("passMjEUiUtA9sword")
-    url = f"mysql+pymysql://{user}:{password}@{host}:{port}/{name}?charset=utf8mb4"
-    return create_engine(url, pool_pre_ping=True, pool_recycle=280)
+    name = _secret("database")
+    user = _secret("user")
+    password = _secret("password")
+
+    url = (
+        f"mysql+pymysql://{user}:{password}"
+        f"@{host}:{port}/{name}?charset=utf8mb4"
+    )
+
+    return create_engine(
+        url,
+        pool_pre_ping=True,
+        pool_recycle=280,
+    )
 
 
 def init_schema():
